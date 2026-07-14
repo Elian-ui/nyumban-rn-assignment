@@ -33,13 +33,14 @@ export function PropertyDetailScreen({ navigation }: Props) {
         </Card>
       </View>
       <Card style={styles.notice}>
-        <Text style={styles.noticeIcon}>✓</Text>
+        <Text style={styles.noticeIcon}>↻</Text>
         <View style={styles.noticeCopy}>
-          <Text style={styles.noticeTitle}>Available offline</Text>
+          <Text style={styles.noticeTitle}>Inspection in progress · 40%</Text>
           <Text style={styles.noticeText}>
-            Property details and rooms are saved on this device.
+            2 of 5 rooms completed · Updated just now
           </Text>
         </View>
+        <Pill label="Draft" tone="amber" />
       </Card>
       <SectionTitle title="Rooms" action="5 total" />
       <Card style={styles.roomsCard}>
@@ -59,7 +60,7 @@ export function PropertyDetailScreen({ navigation }: Props) {
         ))}
       </Card>
       <PrimaryButton
-        label="Start routine inspection"
+        label="Continue inspection"
         onPress={() =>
           navigation.navigate('Inspection', { propertyId: 'prp_0000' })
         }
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     marginRight: 12,
   },
-  noticeCopy: { flex: 1 },
+  noticeCopy: { flex: 1, paddingRight: 8 },
   noticeTitle: { color: colors.primaryDark, fontWeight: '800', fontSize: 14 },
   noticeText: {
     color: colors.primaryDark,

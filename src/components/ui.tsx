@@ -30,9 +30,11 @@ export function PrimaryButton({
 export function Pill({
   label,
   tone = 'green',
+  style,
 }: {
   label: string;
   tone?: 'green' | 'amber' | 'grey' | 'red';
+  style?: ViewStyle;
 }) {
   const tones = {
     green: [styles.pillGreen, styles.pillTextGreen],
@@ -41,7 +43,7 @@ export function Pill({
     red: [styles.pillRed, styles.pillTextRed],
   } as const;
   return (
-    <View style={[styles.pill, tones[tone][0]]}>
+    <View style={[styles.pill, tones[tone][0], style]}>
       <Text style={[styles.pillText, tones[tone][1]]}>{label}</Text>
     </View>
   );
@@ -125,6 +127,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   pill: {
     alignSelf: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,

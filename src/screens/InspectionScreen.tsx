@@ -20,13 +20,13 @@ export function InspectionScreen({ navigation }: Props) {
         <Card style={styles.progressCard}>
           <View style={styles.progressTop}>
             <Text style={styles.progressTitle}>Inspection progress</Text>
-            <Text style={styles.progressValue}>0 of 5</Text>
+            <Text style={styles.progressValue}>2 of 5</Text>
           </View>
           <View style={styles.track}>
             <View style={styles.fill} />
           </View>
           <Text style={styles.progressHelp}>
-            Complete each room before finishing.
+            40% complete · Last saved just now
           </Text>
         </Card>
         <Text style={styles.sectionLabel}>ROOMS</Text>
@@ -45,12 +45,44 @@ export function InspectionScreen({ navigation }: Props) {
                 index < rooms.length - 1 && styles.roomBorder,
               ]}
             >
-              <View style={styles.emptyState} />
+              <View
+                style={[
+                  styles.roomState,
+                  room.state === 'Completed' && styles.completedState,
+                  room.state === 'In progress' && styles.activeState,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.roomStateText,
+                    room.state === 'Completed' && styles.completedStateText,
+                    room.state === 'In progress' && styles.activeStateText,
+                  ]}
+                >
+                  {room.state === 'Completed'
+                    ? '✓'
+                    : room.state === 'In progress'
+                    ? '•'
+                    : ''}
+                </Text>
+              </View>
               <View style={styles.roomCopy}>
                 <Text style={styles.roomName}>{room.label}</Text>
                 <Text style={styles.roomFloor}>{room.floor}</Text>
               </View>
-              <Pill label="Not started" tone="grey" />
+              <View style={styles.badgeColumn}>
+                <Pill
+                  label={room.state}
+                  style={styles.roomBadge}
+                  tone={
+                    room.state === 'Completed'
+                      ? 'green'
+                      : room.state === 'In progress'
+                      ? 'amber'
+                      : 'grey'
+                  }
+                />
+              </View>
               <Text style={styles.chevron}>›</Text>
             </Pressable>
           ))}
@@ -108,7 +140,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     overflow: 'hidden',
   },
-  fill: { height: 7, width: '3%', backgroundColor: colors.primary },
+  fill: { height: 7, width: '40%', backgroundColor: colors.primary },
   progressHelp: { fontSize: 11, color: colors.muted, marginTop: 9 },
   sectionLabel: {
     fontSize: 11,
@@ -120,17 +152,48 @@ const styles = StyleSheet.create({
   roomList: { paddingVertical: 0 },
   room: { minHeight: 70, flexDirection: 'row', alignItems: 'center' },
   roomBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
-  emptyState: {
+  roomState: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
     borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  completedState: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  activeState: {
+    borderColor: colors.amber,
+    backgroundColor: colors.amberSoft,
+  },
+  roomStateText: { fontSize: 12, fontWeight: '900' },
+  completedStateText: { color: colors.surface },
+  activeStateText: { color: colors.amber, fontSize: 18, lineHeight: 18 },
   roomCopy: { flex: 1, marginLeft: 11 },
   roomName: { fontSize: 15, fontWeight: '700', color: colors.ink },
   roomFloor: { fontSize: 11, color: colors.muted, marginTop: 3 },
-  chevron: { fontSize: 25, color: colors.muted, marginLeft: 7 },
+  badgeColumn: {
+    width: 96,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roomBadge: {
+    alignSelf: 'stretch',
+    height: 28,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    justifyContent: 'center',
+  },
+  chevron: {
+    width: 18,
+    fontSize: 25,
+    color: colors.muted,
+    marginLeft: 5,
+    textAlign: 'right',
+  },
   tip: {
     marginTop: spacing.md,
     backgroundColor: colors.amberSoft,

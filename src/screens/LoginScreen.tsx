@@ -54,9 +54,7 @@ export function LoginScreen({ navigation }: Props) {
             label="Sign in"
             onPress={() => navigation.replace('Properties')}
           />
-          <Text style={styles.helper}>
-            Your session stays available when the network drops.
-          </Text>
+
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
