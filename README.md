@@ -125,7 +125,7 @@ Build the installable release APK from the repository root:
 
 ```sh
 cd android
-./gradlew assembleRelease --no-parallel
+./gradlew assembleRelease
 cd ..
 ```
 
@@ -150,6 +150,33 @@ adb install android/app/build/outputs/apk/release/app-release.apk
 
 The release APK contains its JavaScript bundle and does not require Metro.
 
+### Publish an APK to GitHub Releases
+
+The workflow at `.github/workflows/android-release.yml` builds and publishes a signed APK whenever a tag beginning with `v` is pushed. Configure these GitHub Actions repository secrets before creating a release:
+
+```text
+ASSESSMENT_KEY
+ANDROID_KEYSTORE_BASE64
+NYUMBAN_UPLOAD_KEY_ALIAS
+NYUMBAN_UPLOAD_STORE_PASSWORD
+NYUMBAN_UPLOAD_KEY_PASSWORD
+```
+
+Create the Base64 keystore value on macOS without committing the source file:
+
+```sh
+base64 -i android/app/my-upload-key.keystore | pbcopy
+```
+
+Paste the clipboard value into the `ANDROID_KEYSTORE_BASE64` secret. Publish a version from a clean commit by pushing a tag:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions installs dependencies, restores the private build inputs on its temporary runner, runs `assembleRelease`, and creates or updates the matching GitHub Release. The downloadable asset is named `nyumban-v1.0.0.apk`. Re-running the workflow for the same tag replaces that asset instead of creating a duplicate.
+
 ## Verification
 
 ```sh
@@ -168,7 +195,7 @@ The React Native community CLI was chosen because the app needs native dependenc
 
 ### SQLite instead of a large AsyncStorage document
 
-The API contains roughly 5,000 properties. Nitro SQLite was chosen because it provides indexed local queries, transactions, foreign keys, and asynchronous work off the JavaScript thread. AsyncStorage remains installed but is not the source of truth for portfolio or inspection data.
+The API contains roughly 5,000 properties. Nitro SQLite was chosen because it provides indexed local queries, transactions, foreign keys, and asynchronous work off the JavaScript thread. AsyncStorage stores only the small Auto sync preference; it is not the source of truth for portfolio, authentication, or inspection data.
 
 The schema is separated into:
 
