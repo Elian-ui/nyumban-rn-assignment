@@ -20,14 +20,25 @@ import { InspectionScreen } from './src/screens/InspectionScreen';
 import { RoomInspectionScreen } from './src/screens/RoomInspectionScreen';
 import { SyncQueueScreen } from './src/screens/SyncQueueScreen';
 import { initializeDatabase } from './src/database';
+import { AuthProvider, useAuth } from './src/auth';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function AppNavigator() {
+  const { status } = useAuth();
+
+  if (status === 'restoring') {
+    return (
+      <View style={styles.databaseState}>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.databaseMessage}>Restoring secure session…</Text>
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Login"
         screenOptions={{
           headerShadowVisible: false,
           headerStyle: { backgroundColor: colors.canvas },
@@ -36,36 +47,41 @@ function AppNavigator() {
           contentStyle: { backgroundColor: colors.canvas },
         }}
       >
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Properties"
-          component={PropertiesScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="PropertyDetail"
-          component={PropertyDetailScreen}
-          options={{ title: 'Property' }}
-        />
-        <Stack.Screen
-          name="Inspection"
-          component={InspectionScreen}
-          options={{ title: 'Routine inspection' }}
-        />
-        <Stack.Screen
-          name="RoomInspection"
-          component={RoomInspectionScreen}
-          options={({ route }) => ({ title: route.params.roomName })}
-        />
-        <Stack.Screen
-          name="SyncQueue"
-          component={SyncQueueScreen}
-          options={{ headerShown: false }}
-        />
+        {status === 'authenticated' ? (
+          <>
+            <Stack.Screen
+              name="Properties"
+              component={PropertiesScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="PropertyDetail"
+              component={PropertyDetailScreen}
+              options={{ title: 'Property' }}
+            />
+            <Stack.Screen
+              name="Inspection"
+              component={InspectionScreen}
+              options={{ title: 'Routine inspection' }}
+            />
+            <Stack.Screen
+              name="RoomInspection"
+              component={RoomInspectionScreen}
+              options={({ route }) => ({ title: route.params.roomName })}
+            />
+            <Stack.Screen
+              name="SyncQueue"
+              component={SyncQueueScreen}
+              options={{ headerShown: false }}
+            />
+          </>
+        ) : (
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -87,7 +103,11 @@ function DatabaseGate() {
   }, [prepareDatabase]);
 
   if (state === 'ready') {
-    return <AppNavigator />;
+    return (
+      <AuthProvider>
+        <AppNavigator />
+      </AuthProvider>
+    );
   }
 
   return (

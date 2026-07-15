@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -7,15 +7,46 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { RootStackParamList } from '../navigation/types';
 import { PrimaryButton } from '../components/ui';
 import { colors, radius, spacing } from '../theme';
+import { useAuth } from '../auth';
+import { ApiError } from '../api/errors';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
+export function LoginScreen() {
+  const { signIn } = useAuth();
+  const [email, setEmail] = useState('agent@nyumban.test');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export function LoginScreen({ navigation }: Props) {
+  async function submit() {
+    if (!email.trim() || !password) {
+      setError('Enter both your email address and password.');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await signIn(email.trim(), password);
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        setError('The email or password is incorrect.');
+      } else if (
+        requestError instanceof Error &&
+        requestError.message.includes('ASSESSMENT_KEY')
+      ) {
+        setError('This build is missing its assessment key.');
+      } else {
+        setError('Could not sign in. Check your connection and try again.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
@@ -42,6 +73,10 @@ export function LoginScreen({ navigation }: Props) {
             placeholderTextColor={colors.muted}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
+            editable={!submitting}
+            value={email}
+            onChangeText={setEmail}
           />
           <Text style={styles.label}>Password</Text>
           <TextInput
@@ -49,12 +84,18 @@ export function LoginScreen({ navigation }: Props) {
             placeholder="Enter password"
             placeholderTextColor={colors.muted}
             secureTextEntry
+            editable={!submitting}
+            value={password}
+            onChangeText={setPassword}
+            onSubmitEditing={submit}
+            returnKeyType="done"
           />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
           <PrimaryButton
-            label="Sign in"
-            onPress={() => navigation.replace('Properties')}
+            label={submitting ? 'Signing in…' : 'Sign in'}
+            onPress={submit}
+            disabled={submitting}
           />
-
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -113,10 +154,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: spacing.xs,
   },
-  helper: {
-    textAlign: 'center',
-    color: colors.muted,
-    fontSize: 12,
-    marginTop: 4,
-  },
+  error: { color: colors.red, fontSize: 12, lineHeight: 18, marginBottom: 2 },
 });

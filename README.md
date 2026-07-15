@@ -1,97 +1,135 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Nyumban Field
 
-# Getting Started
+I built Nyumban Field as an offline-first React Native application for agents performing residential property inspections in unreliable network conditions.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+I am maintaining this README alongside the implementation. It records the decisions I made, the trade-offs I accepted, unfinished work, and known problems rather than serving only as a feature list.
 
-## Step 1: Start Metro
+## Current status
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+Implemented:
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- Android-first inspection screen flow and typed native-stack navigation.
+- Room condition, notes, and single-photo capture/library selection UI.
+- Versioned SQLite database initialization and normalized domain models.
+- Secure session persistence using Android Keystore/iOS Keychain.
+- Login against the assessment API.
+- Serialized refresh-token rotation and session restoration.
+
+Still using static data:
+
+- Property list and property detail.
+- Inspection progress and sync queue.
+
+## Running the app
+
+Requirements:
+
+- Node.js 22.11 or newer.
+- React Native Android development environment.
+- A personal Nyumban assessment key.
+
+Install dependencies:
 
 ```sh
-# Using npm
+npm install
+```
+
+Create the local environment file:
+
+```sh
+cp .env.example .env
+```
+
+Set the issued key in `.env`:
+
+```text
+ASSESSMENT_KEY=your-personal-key
+```
+
+The `.env` file is ignored by Git. I am aware that the key is necessarily present in the compiled client application, but I do not store it in this repository.
+
+Run Android:
+
+```sh
 npm start
-
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
+The shared test credentials are:
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+```text
+agent@nyumban.test
+Kireka2026!
+```
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+## Verification
 
 ```sh
-bundle install
+npm run lint
+npx tsc --noEmit
+npm test -- --runInBand
 ```
 
-Then, and every time you update your native dependencies, run:
+Jest currently fails before executing tests because the generated scaffold references a missing `@react-native/jest-preset`. I have kept this visible as known work instead of hiding it by removing the test command.
 
-```sh
-bundle exec pod install
+## Decisions and trade-offs
+
+### Bare React Native
+
+I chose the React Native community CLI because the app needs native dependencies for SQLite, secure credential storage, navigation screens, and camera/library access.
+
+### SQLite instead of a large AsyncStorage document
+
+The API contains roughly 5,000 properties. I chose Nitro SQLite because it provides indexed local queries, transactions, foreign keys, and asynchronous work off the JavaScript thread. AsyncStorage remains installed, but I do not use it as the source of truth for portfolio or inspection data.
+
+I separated the schema into:
+
+- Properties and rooms.
+- Inspections and per-room entries.
+- Local photo evidence and server upload identifiers.
+- Local sync status, validation failures, and conflict snapshots.
+
+I use SQLite's `user_version` for migrations and execute each migration transactionally. I also enable WAL mode and a busy timeout during startup.
+
+### Local-first inspection state
+
+My intended data path is:
+
+```text
+Screens → SQLite → durable sync queue → API
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+I will not treat a network response as the working copy of an inspection. Draft edits must first be committed locally so the app can survive termination, airplane mode, and ambiguous server responses.
 
-```sh
-# Using npm
-npm run ios
+### Authentication and rotating refresh tokens
 
-# OR using Yarn
-yarn ios
-```
+I store access and refresh tokens in Android Keystore/iOS Keychain rather than plain AsyncStorage. Refresh operations share one in-flight promise. This prevents two callers from spending the same single-use refresh token and revoking the server session.
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+The app restores the stored session on startup and refreshes one minute before access-token expiry. If restoration fails, I clear the local session credentials and return the agent to login.
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+### Photo scope
 
-## Step 3: Modify your app
+I currently allow one photo per room. This keeps memory use, upload volume, and the API's approximately 200-photo account quota bounded. I compress and resize photos through the picker and reject files over the API's 5 MB limit locally.
 
-Now that you have successfully run the app, let's make changes!
+## What I have deliberately not built yet
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+- Property API client, pagination, local caching, and offline search.
+- Durable inspection draft repositories.
+- Photo upload and inspection submission workers.
+- Retry policy for `429`, `500`, and `503` responses.
+- Conflict resolution UI for stale property versions.
+- Reconciliation against server inspection history.
+- Background synchronization.
+- Final release APK and signing configuration.
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+## Known issues
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+- Screen content after login is still mock data.
+- Room condition selection and photo choice are not yet persisted to SQLite.
+- The sync screen is visual only.
+- Jest configuration is incomplete as described above.
+- Native Android compilation of the SQLite dependency has not yet been verified in this environment because Gradle cache access was not granted.
 
-## Congratulations! :tada:
+## My next implementation slice
 
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+My next slice is authenticated property retrieval and normalization, transactional page upserts into SQLite, cursor pagination, and local search/filter queries. I will then replace the mock property data with records read from the local cache.
