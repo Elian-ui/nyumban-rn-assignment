@@ -58,10 +58,10 @@ interface PhotoRow extends QueryResultRow {
   updated_at: number;
 }
 
-function parseJsonObject(value: string | null): Record<string, string> | null {
+function parseJson(value: string | null): unknown | null {
   if (!value) return null;
   try {
-    return JSON.parse(value) as Record<string, string>;
+    return JSON.parse(value) as unknown;
   } catch {
     return null;
   }
@@ -81,10 +81,8 @@ function inspectionFromRow(row: Record<string, SQLiteValue>): Inspection {
     serverCreatedAt: value.server_created_at,
     serverUpdatedAt: value.server_updated_at,
     errorCode: value.error_code,
-    errorDetails: parseJsonObject(value.error_details_json),
-    conflictProperty: value.conflict_property_json
-      ? JSON.parse(value.conflict_property_json)
-      : null,
+    errorDetails: parseJson(value.error_details_json),
+    conflictProperty: parseJson(value.conflict_property_json),
     createdAt: value.created_at,
     updatedAt: value.updated_at,
   };
@@ -394,4 +392,63 @@ export async function countPendingInspections(): Promise<number> {
   );
   const count = result.results[0]?.count;
   return typeof count === 'number' ? count : 0;
+}
+
+function serverPropertyVersion(value: unknown): number | null {
+  if (!value || typeof value !== 'object') return null;
+  const version = (value as { version?: unknown }).version;
+  return typeof version === 'number' && Number.isFinite(version)
+    ? version
+    : null;
+}
+
+export async function retryConflictWithCurrentVersion(
+  inspectionId: string,
+): Promise<void> {
+  const draft = await getInspectionDraft(inspectionId);
+  if (!draft || draft.inspection.status !== 'conflict') {
+    throw new Error('Conflicted inspection not found');
+  }
+
+  const version = serverPropertyVersion(draft.inspection.conflictProperty);
+  if (version === null) {
+    throw new Error('The server property version is unavailable');
+  }
+
+  const now = Date.now();
+  await database().transaction(async tx => {
+    await tx.executeAsync(
+      `UPDATE inspections SET property_version = ?, status = 'queued',
+       idempotency_key = ?, error_code = NULL, error_details_json = NULL,
+       conflict_property_json = NULL, updated_at = ?
+       WHERE id = ? AND status = 'conflict'`,
+      [version, createLocalId('idem'), now, inspectionId],
+    );
+    await tx.executeAsync(
+      'UPDATE properties SET version = ?, cached_at = ? WHERE id = ?',
+      [version, now, draft.inspection.propertyId],
+    );
+  });
+}
+
+export async function reopenRejectedInspection(
+  inspectionId: string,
+): Promise<void> {
+  const now = Date.now();
+  await database().transaction(async tx => {
+    await tx.executeAsync(
+      `UPDATE inspections SET status = 'draft', idempotency_key = ?,
+       completed_at = NULL, error_code = NULL, error_details_json = NULL,
+       conflict_property_json = NULL, updated_at = ?
+       WHERE id = ? AND status = 'rejected'`,
+      [createLocalId('idem'), now, inspectionId],
+    );
+    await tx.executeAsync(
+      `UPDATE photo_evidence SET status = 'local', error_code = NULL,
+       updated_at = ? WHERE status = 'rejected' AND room_entry_id IN (
+         SELECT id FROM room_entries WHERE inspection_id = ?
+       )`,
+      [now, inspectionId],
+    );
+  });
 }

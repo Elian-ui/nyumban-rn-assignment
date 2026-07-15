@@ -4,10 +4,12 @@ export {
   countPendingInspections,
   listSyncInspections,
   queueInspection,
+  reopenRejectedInspection,
   recoverInterruptedSync,
   removeRoomPhoto,
   saveRoomEntry,
   saveRoomPhoto,
+  retryConflictWithCurrentVersion,
   setInspectionSyncState,
   setPhotoSyncState,
 } from './inspectionRepository';

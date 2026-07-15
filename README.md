@@ -25,6 +25,7 @@ Implemented:
 - Stable idempotency keys, transient retries, conflicts, and rejection states.
 - Automatic sync triggers on startup, foreground, and connectivity return.
 - Reconciliation against the agent's independently fetched server history.
+- Guided recovery for property-version conflicts and server rejections.
 
 ## Running the app
 
@@ -137,6 +138,8 @@ The sync worker is single-flight and processes inspections sequentially. Local p
 
 Server conflicts and permanent validation or quota errors move records to explicit `conflict` or `rejected` states. Interrupted `syncing` and `uploading` states are recovered to retryable local states on the next run.
 
+A conflicted inspection shows its local property version beside the current server version and requires explicit confirmation before being requeued against the server version. A rejected inspection shows available validation messages and can be reopened for correction with all room entries and photos preserved. Corrected submissions receive a fresh idempotency key so the API does not replay a stored rejection from the earlier request.
+
 Connectivity state is treated as a trigger rather than proof that the API is reachable. Sync runs through one shared cycle on authenticated startup, when the app returns to the foreground, and when NetInfo reports a usable connection. Request failures remain authoritative and are handled by the queue policy above.
 
 After local submissions are processed, reconciliation pages through `GET /inspections?agentId=` and stores the server's independent view in SQLite. Known local server IDs are confirmed as synced without relying solely on the state left by the original request.
@@ -151,17 +154,15 @@ Completed inspections remain durable in SQLite when the process is terminated. S
 
 ## Deliberately not built yet
 
-- Conflict resolution UI for stale property versions.
 - Background execution while the application is fully suspended.
 - Final release APK and signing configuration.
 
 ## Known issues
 
-- Conflict and rejection states are visible but do not yet have guided resolution actions.
 - Sync is triggered automatically while the process is running, but Android background scheduling while fully suspended is not implemented.
 - Jest configuration is incomplete as described above.
 - Native Android compilation of the SQLite dependency has not yet been verified in this environment because Gradle cache access was not granted.
 
 ## Next implementation slice
 
-The next slice is guided conflict and validation handling that preserves the original inspection while showing the current server truth. Test infrastructure, Android release verification, and the final assessment APK also remain before submission.
+The next slice is test infrastructure and Android release verification. Terminated-process background scheduling and the final assessment APK also remain before submission.

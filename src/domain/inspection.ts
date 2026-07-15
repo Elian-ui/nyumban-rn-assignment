@@ -24,7 +24,7 @@ export interface Inspection {
   serverCreatedAt: number | null;
   serverUpdatedAt: number | null;
   errorCode: string | null;
-  errorDetails: Record<string, string> | null;
+  errorDetails: unknown | null;
   conflictProperty: unknown | null;
   createdAt: number;
   updatedAt: number;

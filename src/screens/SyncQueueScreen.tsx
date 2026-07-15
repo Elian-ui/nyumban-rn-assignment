@@ -1,6 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,7 +20,11 @@ import {
   SectionTitle,
 } from '../components/ui';
 import { colors, spacing } from '../theme';
-import { listSyncInspections } from '../inspections';
+import {
+  listSyncInspections,
+  reopenRejectedInspection,
+  retryConflictWithCurrentVersion,
+} from '../inspections';
 import type { InspectionDraft, InspectionSyncStatus } from '../domain';
 import { runSyncCycle } from '../sync';
 import { useAuth } from '../auth';
@@ -62,10 +68,35 @@ function itemMessage(item: SyncItem): string {
   }`;
 }
 
+function conflictVersion(item: SyncItem): number | null {
+  const property = item.inspection.conflictProperty;
+  if (!property || typeof property !== 'object') return null;
+  const version = (property as { version?: unknown }).version;
+  return typeof version === 'number' ? version : null;
+}
+
+function validationMessages(details: unknown): string[] {
+  if (!details || typeof details !== 'object') return [];
+  const body = details as { errors?: unknown; message?: unknown };
+  if (body.errors && typeof body.errors === 'object') {
+    return Object.entries(body.errors).flatMap(([field, value]) => {
+      if (typeof value === 'string') return [`${field}: ${value}`];
+      if (Array.isArray(value)) {
+        return value
+          .filter(message => typeof message === 'string')
+          .map(message => `${field}: ${message}`);
+      }
+      return [];
+    });
+  }
+  return typeof body.message === 'string' ? [body.message] : [];
+}
+
 export function SyncQueueScreen({ navigation }: Props) {
   const { session } = useAuth();
   const [items, setItems] = useState<SyncItem[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [recoveringId, setRecoveringId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setItems(await listSyncInspections());
@@ -84,6 +115,59 @@ export function SyncQueueScreen({ navigation }: Props) {
     } finally {
       await load();
       setSyncing(false);
+    }
+  }
+
+  function reviewConflict(item: SyncItem) {
+    const serverVersion = conflictVersion(item);
+    if (serverVersion === null) {
+      Alert.alert(
+        'Server version unavailable',
+        'Refresh properties before retrying this inspection.',
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Use current property version?',
+      `Inspection version: ${item.inspection.propertyVersion}\nServer version: ${serverVersion}\n\nRoom entries and photos will be preserved and queued against the server version.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Update and retry',
+          onPress: async () => {
+            setRecoveringId(item.inspection.id);
+            try {
+              await retryConflictWithCurrentVersion(item.inspection.id);
+              await load();
+            } catch (error) {
+              Alert.alert(
+                'Could not retry',
+                error instanceof Error ? error.message : 'Try again.',
+              );
+            } finally {
+              setRecoveringId(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function editRejected(item: SyncItem) {
+    setRecoveringId(item.inspection.id);
+    try {
+      await reopenRejectedInspection(item.inspection.id);
+      navigation.navigate('Inspection', {
+        propertyId: item.inspection.propertyId,
+      });
+    } catch (error) {
+      Alert.alert(
+        'Could not reopen inspection',
+        error instanceof Error ? error.message : 'Try again.',
+      );
+    } finally {
+      setRecoveringId(null);
     }
   }
 
@@ -133,32 +217,72 @@ export function SyncQueueScreen({ navigation }: Props) {
             action={`${pending.length} items`}
           />
           {pending.length ? (
-            pending.map(item => (
-              <Card key={item.inspection.id} style={styles.item}>
-                <View style={styles.itemTop}>
-                  <View style={styles.itemCopy}>
-                    <Text style={styles.itemTitle}>{item.propertyName}</Text>
-                    <Text style={styles.itemMeta}>
-                      {item.inspection.type.replace('_', '-')} · Saved locally
-                    </Text>
+            pending.map(item => {
+              const messages = validationMessages(item.inspection.errorDetails);
+              const recovering = recoveringId === item.inspection.id;
+              return (
+                <Card key={item.inspection.id} style={styles.item}>
+                  <View style={styles.itemTop}>
+                    <View style={styles.itemCopy}>
+                      <Text style={styles.itemTitle}>{item.propertyName}</Text>
+                      <Text style={styles.itemMeta}>
+                        {item.inspection.type.replace('_', '-')} · Saved locally
+                      </Text>
+                    </View>
+                    <Pill
+                      label={labels[item.inspection.status]}
+                      tone={tone(item.inspection.status)}
+                    />
                   </View>
-                  <Pill
-                    label={labels[item.inspection.status]}
-                    tone={tone(item.inspection.status)}
-                  />
-                </View>
-                <View style={styles.divider} />
-                <Text
-                  style={[
-                    styles.detail,
-                    ['conflict', 'rejected'].includes(item.inspection.status) &&
-                      styles.error,
-                  ]}
-                >
-                  {itemMessage(item)}
-                </Text>
-              </Card>
-            ))
+                  <View style={styles.divider} />
+                  <Text
+                    style={[
+                      styles.detail,
+                      ['conflict', 'rejected'].includes(
+                        item.inspection.status,
+                      ) && styles.error,
+                    ]}
+                  >
+                    {itemMessage(item)}
+                  </Text>
+                  {messages.map(message => (
+                    <Text key={message} style={styles.validationMessage}>
+                      {message}
+                    </Text>
+                  ))}
+                  {item.inspection.status === 'conflict' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={recovering}
+                      onPress={() => reviewConflict(item)}
+                      style={({ pressed }) => [
+                        styles.recoveryButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Text style={styles.recoveryButtonText}>
+                        {recovering ? 'Updating…' : 'Review and retry'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {item.inspection.status === 'rejected' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={recovering}
+                      onPress={() => editRejected(item)}
+                      style={({ pressed }) => [
+                        styles.recoveryButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                    >
+                      <Text style={styles.recoveryButtonText}>
+                        {recovering ? 'Opening…' : 'Edit inspection'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </Card>
+              );
+            })
           ) : (
             <Card style={styles.empty}>
               <Text style={styles.emptyTitle}>Nothing waiting</Text>
@@ -256,6 +380,26 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.line, marginVertical: 12 },
   detail: { fontSize: 12, lineHeight: 18, color: colors.muted },
   error: { color: colors.red },
+  validationMessage: {
+    color: colors.red,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 5,
+  },
+  recoveryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 10,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  recoveryButtonText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  buttonPressed: { opacity: 0.7 },
   empty: { alignItems: 'center', paddingVertical: 22 },
   emptyTitle: {
     fontSize: 14,
