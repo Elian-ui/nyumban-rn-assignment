@@ -1,5 +1,12 @@
 import React, { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { colors, radius, spacing } from '../theme';
 
 export function PrimaryButton({
@@ -34,7 +41,7 @@ export function Pill({
 }: {
   label: string;
   tone?: 'green' | 'amber' | 'grey' | 'red';
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }) {
   const tones = {
     green: [styles.pillGreen, styles.pillTextGreen],
@@ -69,7 +76,7 @@ export function Card({
   style,
 }: {
   children: ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }

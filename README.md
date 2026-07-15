@@ -14,10 +14,12 @@ Implemented:
 - Secure session persistence using Android Keystore/iOS Keychain.
 - Login against the assessment API.
 - Serialized refresh-token rotation and session restoration.
+- Authenticated property retrieval with cursor pagination.
+- Transactional property and room caching in SQLite.
+- Local property search and cache-first property detail.
 
 Still using static data:
 
-- Property list and property detail.
 - Inspection progress and sync queue.
 
 ## Running the app
@@ -111,9 +113,14 @@ The app restores the stored session on startup and refreshes one minute before a
 
 I currently allow one photo per room. This keeps memory use, upload volume, and the API's approximately 200-photo account quota bounded. I compress and resize photos through the picker and reject files over the API's 5 MB limit locally.
 
+### Property cache and pagination
+
+I render the cached property list first, then refresh the first API page when a session is available. Each page is upserted in a transaction and its opaque next cursor is stored in database metadata. Scrolling requests the next page, while pull-to-refresh starts again at the first page without deleting older cached records.
+
+Search queries SQLite rather than depending on the network. If a request fails, I keep the existing cache and label the screen as offline instead of replacing valid data with an empty state. Opening a property follows the same approach: render its cached record, request fresh detail and rooms, then update the screen from SQLite.
+
 ## What I have deliberately not built yet
 
-- Property API client, pagination, local caching, and offline search.
 - Durable inspection draft repositories.
 - Photo upload and inspection submission workers.
 - Retry policy for `429`, `500`, and `503` responses.
@@ -124,7 +131,7 @@ I currently allow one photo per room. This keeps memory use, upload volume, and 
 
 ## Known issues
 
-- Screen content after login is still mock data.
+- Inspection and sync content is still mock data.
 - Room condition selection and photo choice are not yet persisted to SQLite.
 - The sync screen is visual only.
 - Jest configuration is incomplete as described above.
@@ -132,4 +139,4 @@ I currently allow one photo per room. This keeps memory use, upload volume, and 
 
 ## My next implementation slice
 
-My next slice is authenticated property retrieval and normalization, transactional page upserts into SQLite, cursor pagination, and local search/filter queries. I will then replace the mock property data with records read from the local cache.
+My next slice is durable inspection drafts and per-room entries. I will make condition, notes, and photo selections commit to SQLite immediately, then drive the progress screen from that local state instead of mock activity.

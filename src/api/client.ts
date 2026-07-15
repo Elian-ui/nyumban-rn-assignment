@@ -15,13 +15,15 @@ async function send(
   token: string,
   options: ApiRequestOptions,
 ): Promise<Response> {
+  const request = { ...options };
+  delete request.retryAuthentication;
   return fetch(`${environment.apiBaseUrl}${path}`, {
-    ...options,
+    ...request,
     headers: {
       Accept: 'application/json',
       'X-Assessment-Key': requireAssessmentKey(),
       Authorization: `Bearer ${token}`,
-      ...options.headers,
+      ...request.headers,
     },
   });
 }

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   StyleSheet,
@@ -10,18 +11,93 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/types';
-import { properties } from '../data/mockData';
 import { BottomNav, Card, Pill } from '../components/ui';
 import { colors, radius, spacing } from '../theme';
+import { useProperties } from '../properties/useProperties';
+import { useAuth } from '../auth';
+import type { Property, PropertyStatus } from '../domain';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Properties'>;
 
+const statusLabels: Record<PropertyStatus, string> = {
+  active: 'Active',
+  inactive: 'Inactive',
+  under_renovation: 'Renovation',
+};
+
+function lastInspectionLabel(value: string | null): string {
+  if (!value) {
+    return 'Never';
+  }
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(value));
+}
+
 export function PropertiesScreen({ navigation }: Props) {
+  const [query, setQuery] = useState('');
+  const { session } = useAuth();
+  const {
+    properties,
+    count,
+    loading,
+    refreshing,
+    loadingMore,
+    hasMore,
+    offlineFallback,
+    refresh,
+    loadMore,
+  } = useProperties(query);
+
+  function renderProperty({ item }: { item: Property }) {
+    return (
+      <Pressable
+        onPress={() =>
+          navigation.navigate('PropertyDetail', { propertyId: item.id })
+        }
+      >
+        <Card style={styles.card}>
+          <View style={styles.cardTop}>
+            <View style={styles.building}>
+              <Text style={styles.buildingText}>▦</Text>
+            </View>
+            <View style={styles.cardCopy}>
+              <Text style={styles.propertyName}>{item.name}</Text>
+              <Text style={styles.address}>
+                {item.address ?? 'Address unavailable'}
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.metaRow}>
+            <Text style={styles.meta}>
+              {item.unitCount === null
+                ? 'Units unknown'
+                : `${item.unitCount} units`}
+            </Text>
+            <Text style={styles.meta}>
+              Last: {lastInspectionLabel(item.lastInspectedAt)}
+            </Text>
+            <Pill
+              label={statusLabels[item.status]}
+              tone={item.status === 'active' ? 'green' : 'amber'}
+            />
+          </View>
+        </Card>
+      </Pressable>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>CENTRAL REGION</Text>
+          <Text style={styles.eyebrow}>
+            {(session?.agent.assignedRegion ?? 'field').toUpperCase()} REGION
+          </Text>
           <Text style={styles.title}>Properties</Text>
         </View>
         <View style={styles.avatar}>
@@ -32,17 +108,18 @@ export function PropertiesScreen({ navigation }: Props) {
         <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
           style={styles.search}
-          placeholder="Search name or address"
+          placeholder="Search cached properties"
           placeholderTextColor={colors.muted}
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
         />
-        <Pressable style={styles.filter}>
-          <Text style={styles.filterText}>Filters</Text>
-        </Pressable>
       </View>
       <View style={styles.connection}>
-        <View style={styles.dot} />
+        <View style={[styles.dot, offlineFallback && styles.offlineDot]} />
         <Text style={styles.connectionText}>
-          Offline ready · 147 properties on this device
+          {offlineFallback ? 'Offline · ' : 'Offline ready · '}
+          {count} {count === 1 ? 'property' : 'properties'} on this device
         </Text>
       </View>
       <FlatList
@@ -50,36 +127,44 @@ export function PropertiesScreen({ navigation }: Props) {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={<Text style={styles.count}>147 PROPERTIES</Text>}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() =>
-              navigation.navigate('PropertyDetail', { propertyId: item.id })
-            }
-          >
-            <Card style={styles.card}>
-              <View style={styles.cardTop}>
-                <View style={styles.building}>
-                  <Text style={styles.buildingText}>▦</Text>
-                </View>
-                <View style={styles.cardCopy}>
-                  <Text style={styles.propertyName}>{item.name}</Text>
-                  <Text style={styles.address}>{item.address}</Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.metaRow}>
-                <Text style={styles.meta}>{item.units} units</Text>
-                <Text style={styles.meta}>Last: {item.lastInspection}</Text>
-                <Pill
-                  label={item.status}
-                  tone={item.status === 'Active' ? 'green' : 'amber'}
-                />
-              </View>
-            </Card>
-          </Pressable>
-        )}
+        refreshing={refreshing}
+        onRefresh={refresh}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.35}
+        renderItem={renderProperty}
+        ListHeaderComponent={
+          <Text style={styles.count}>
+            {query
+              ? `${properties.length} MATCHES`
+              : `${count} CACHED PROPERTIES`}
+          </Text>
+        }
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator style={styles.loader} color={colors.primary} />
+          ) : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>
+                {query ? 'No cached matches' : 'No properties cached yet'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {offlineFallback
+                  ? 'Connect to the internet and pull down to try again.'
+                  : 'Pull down to refresh the portfolio.'}
+              </Text>
+            </View>
+          )
+        }
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator
+              style={styles.footerLoader}
+              color={colors.primary}
+            />
+          ) : hasMore && !query ? (
+            <Text style={styles.moreHint}>Scroll to cache more properties</Text>
+          ) : null
+        }
       />
       <BottomNav
         active="properties"
@@ -131,19 +216,10 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 14,
+    paddingHorizontal: 14,
   },
   searchIcon: { fontSize: 24, color: colors.muted, marginRight: 8 },
   search: { flex: 1, color: colors.ink, fontSize: 15 },
-  filter: {
-    height: 36,
-    paddingHorizontal: 13,
-    marginRight: 7,
-    justifyContent: 'center',
-    backgroundColor: colors.slateSoft,
-    borderRadius: 10,
-  },
-  filterText: { fontSize: 12, color: colors.ink, fontWeight: '700' },
   connection: {
     marginHorizontal: spacing.lg,
     marginTop: 12,
@@ -157,8 +233,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     marginRight: 7,
   },
+  offlineDot: { backgroundColor: colors.amber },
   connectionText: { fontSize: 12, color: colors.muted },
-  list: { padding: spacing.lg, paddingTop: spacing.md, gap: 12 },
+  list: { padding: spacing.lg, paddingTop: spacing.md, gap: 12, flexGrow: 1 },
   count: {
     fontSize: 11,
     fontWeight: '800',
@@ -187,5 +264,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  meta: { fontSize: 11, color: colors.muted },
+  meta: { fontSize: 11, color: colors.muted, maxWidth: '32%' },
+  loader: { marginTop: 60 },
+  empty: { alignItems: 'center', paddingTop: 54, paddingHorizontal: 24 },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: colors.ink },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 7,
+  },
+  footerLoader: { paddingVertical: 18 },
+  moreHint: {
+    textAlign: 'center',
+    color: colors.muted,
+    fontSize: 11,
+    paddingVertical: 16,
+  },
 });
