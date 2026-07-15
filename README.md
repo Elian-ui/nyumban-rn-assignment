@@ -16,6 +16,7 @@ Implemented:
 - Serialized refresh-token rotation and session restoration.
 - Authenticated property retrieval with cursor pagination.
 - Transactional property and room caching in SQLite.
+- Bounded detail prefetch for fully offline-ready loaded property pages.
 - Local property search and cache-first property detail.
 - Durable inspection drafts and per-room progress from SQLite.
 - Autosaved room conditions, notes, and local photo metadata.
@@ -24,7 +25,9 @@ Implemented:
 - Ordered photo upload and inspection submission from the local queue.
 - Stable idempotency keys, transient retries, conflicts, and rejection states.
 - Automatic sync triggers on startup, foreground, and connectivity return.
+- Persisted Auto sync preference with manual sync always available.
 - Reconciliation against the agent's independently fetched server history.
+- Unified inspection history for local work and reconciled server records.
 - Guided recovery for property-version conflicts and server rejections.
 
 ## Running the app
@@ -124,6 +127,10 @@ The cached property list renders first, followed by a refresh of the first API p
 
 Search queries SQLite rather than depending on the network. A failed request keeps the existing cache and labels the screen as offline instead of replacing valid data with an empty state. Opening a property follows the same approach: render its cached record, request fresh detail and rooms, then update the screen from SQLite.
 
+The list and detail endpoints have different payloads: list pages contain summaries, while rooms come from each property's detail endpoint. A nullable detail-cache timestamp distinguishes a saved summary from a fully offline-ready property, including properties that legitimately have no rooms. After a list page is stored, missing details are fetched with at most three concurrent requests and saved transactionally. Successful downloads remain complete if connectivity fails partway through, and only missing details are retried when that page is refreshed. A newer summary version invalidates the detail-ready marker and schedules that property for another detail fetch.
+
+Prefetch is limited to pages already loaded by the agent. Automatically requesting detail for the entire portfolio of roughly 5,000 properties would create thousands of uncontrolled requests and increase rate-limit risk. The property list labels completed records as offline ready and reports summary-only records honestly until their rooms have been downloaded.
+
 ### Durable inspection drafts
 
 Starting an inspection creates a local inspection record and one room-entry record per cached room in a single transaction. Reopening the property resumes the latest draft instead of creating another one. Room condition and note changes autosave to SQLite, while the explicit Save button provides a retry path when a local write fails.
@@ -142,7 +149,11 @@ A conflicted inspection shows its local property version beside the current serv
 
 Connectivity state is treated as a trigger rather than proof that the API is reachable. Sync runs through one shared cycle on authenticated startup, when the app returns to the foreground, and when NetInfo reports a usable connection. Request failures remain authoritative and are handled by the queue policy above.
 
+Auto sync is enabled by default and can be disabled from the Sync screen. The preference is stored locally and is loaded before automatic listeners begin work, preventing a disabled setting from triggering a startup sync. Disabling it stops startup, foreground, and connectivity triggers; the manual Sync now action and inspection-history pull-to-refresh remain available.
+
 After local submissions are processed, reconciliation pages through `GET /inspections?agentId=` and stores the server's independent view in SQLite. Known local server IDs are confirmed as synced without relying solely on the state left by the original request.
+
+The Inspections tab combines local drafts, queued work, conflicts, rejections, synced submissions, and independently retrieved server inspections. Server rows already linked to a local submission are de-duplicated. Pull-to-refresh runs the same serialized sync and reconciliation cycle before reloading the local history, while drafts can return directly to their saved inspection flow and attention states open the sync queue.
 
 ### Terminated-process background sync
 

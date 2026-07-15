@@ -14,3 +14,7 @@ export {
   setPhotoSyncState,
 } from './inspectionRepository';
 export { persistRoomPhoto, removePersistedRoomPhoto } from './photoStorage';
+export {
+  listInspectionHistory,
+  type InspectionHistoryItem,
+} from './historyRepository';

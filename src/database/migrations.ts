@@ -155,4 +155,16 @@ export const migrations: Migration[] = [
       },
     ],
   },
+  {
+    version: 4,
+    statements: [
+      {
+        query: 'ALTER TABLE properties ADD COLUMN details_cached_at INTEGER',
+      },
+      {
+        query:
+          'CREATE INDEX IF NOT EXISTS idx_properties_details_cache ON properties(details_cached_at)',
+      },
+    ],
+  },
 ];

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Property } from '../domain';
 import {
   countCachedProperties,
+  countOfflineReadyProperties,
   getPropertyCursor,
   listCachedProperties,
 } from './propertyRepository';
@@ -10,6 +11,7 @@ import { fetchNextPropertyPage, refreshProperties } from './propertyService';
 export function useProperties(query: string) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [count, setCount] = useState(0);
+  const [offlineReadyCount, setOfflineReadyCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -20,14 +22,16 @@ export function useProperties(query: string) {
 
   const loadCache = useCallback(async (search: string, limit: number) => {
     const id = ++requestId.current;
-    const [cached, cachedCount, cursor] = await Promise.all([
+    const [cached, cachedCount, readyCount, cursor] = await Promise.all([
       listCachedProperties({ query: search }, search.trim() ? 250 : limit),
       countCachedProperties(),
+      countOfflineReadyProperties(),
       getPropertyCursor(),
     ]);
     if (id === requestId.current) {
       setProperties(cached);
       setCount(cachedCount);
+      setOfflineReadyCount(readyCount);
       setHasMore(cursor !== null);
       setLoading(false);
     }
@@ -103,6 +107,7 @@ export function useProperties(query: string) {
   return {
     properties,
     count,
+    offlineReadyCount,
     loading,
     refreshing,
     loadingMore,

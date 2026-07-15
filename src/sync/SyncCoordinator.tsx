@@ -1,14 +1,28 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { useAuth } from '../auth';
 import { runSyncCycle } from './syncCycle';
+import { getAutoSyncEnabled, subscribeToAutoSync } from './syncPreferences';
 
 export function SyncCoordinator() {
   const { status, session } = useAuth();
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (status !== 'authenticated' || !session) return;
+    let active = true;
+    getAutoSyncEnabled().then(enabled => {
+      if (active) setAutoSyncEnabled(enabled);
+    });
+    const unsubscribe = subscribeToAutoSync(setAutoSyncEnabled);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !session || !autoSyncEnabled) return;
 
     const trigger = () => {
       runSyncCycle(session.agent.id).catch(() => undefined);
@@ -26,7 +40,7 @@ export function SyncCoordinator() {
       removeNetworkListener();
       appStateListener.remove();
     };
-  }, [session, status]);
+  }, [autoSyncEnabled, session, status]);
 
   return null;
 }

@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -26,7 +27,7 @@ import {
   retryConflictWithCurrentVersion,
 } from '../inspections';
 import type { InspectionDraft, InspectionSyncStatus } from '../domain';
-import { runSyncCycle } from '../sync';
+import { getAutoSyncEnabled, runSyncCycle, setAutoSyncEnabled } from '../sync';
 import { useAuth } from '../auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SyncQueue'>;
@@ -97,6 +98,8 @@ export function SyncQueueScreen({ navigation }: Props) {
   const [items, setItems] = useState<SyncItem[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [recoveringId, setRecoveringId] = useState<string | null>(null);
+  const [autoSyncEnabled, setAutoSyncEnabledState] = useState(true);
+  const [savingPreference, setSavingPreference] = useState(false);
 
   const load = useCallback(async () => {
     setItems(await listSyncInspections());
@@ -105,6 +108,7 @@ export function SyncQueueScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       load();
+      getAutoSyncEnabled().then(setAutoSyncEnabledState);
     }, [load]),
   );
 
@@ -115,6 +119,19 @@ export function SyncQueueScreen({ navigation }: Props) {
     } finally {
       await load();
       setSyncing(false);
+    }
+  }
+
+  async function toggleAutoSync(enabled: boolean) {
+    setAutoSyncEnabledState(enabled);
+    setSavingPreference(true);
+    try {
+      await setAutoSyncEnabled(enabled);
+    } catch {
+      setAutoSyncEnabledState(!enabled);
+      Alert.alert('Could not save setting', 'Try changing Auto sync again.');
+    } finally {
+      setSavingPreference(false);
     }
   }
 
@@ -198,6 +215,22 @@ export function SyncQueueScreen({ navigation }: Props) {
               them.
             </Text>
           </View>
+        </Card>
+        <Card style={styles.preference}>
+          <View style={styles.preferenceCopy}>
+            <Text style={styles.preferenceTitle}>Auto sync</Text>
+            <Text style={styles.preferenceText}>
+              Sync on startup, foreground return, and connectivity regain.
+            </Text>
+          </View>
+          <Switch
+            accessibilityLabel="Auto sync"
+            disabled={savingPreference}
+            value={autoSyncEnabled}
+            onValueChange={toggleAutoSync}
+            trackColor={{ false: colors.line, true: colors.primarySoft }}
+            thumbColor={autoSyncEnabled ? colors.primary : colors.muted}
+          />
         </Card>
         <PrimaryButton
           label={syncing ? 'Syncing…' : 'Sync now'}
@@ -319,6 +352,7 @@ export function SyncQueueScreen({ navigation }: Props) {
       <BottomNav
         active="sync"
         onProperties={() => navigation.navigate('Properties')}
+        onInspections={() => navigation.navigate('InspectionHistory')}
         onSync={() => undefined}
         syncCount={pending.length}
       />
@@ -371,6 +405,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   syncSpinner: { marginTop: 14 },
+  preference: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  preferenceCopy: { flex: 1, paddingRight: 12 },
+  preferenceTitle: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  preferenceText: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 4,
+  },
   section: { marginTop: spacing.xl },
   item: { marginBottom: 11 },
   itemTop: { flexDirection: 'row', alignItems: 'center' },

@@ -9,4 +9,5 @@ export type RootStackParamList = {
     roomName: string;
   };
   SyncQueue: undefined;
+  InspectionHistory: undefined;
 };

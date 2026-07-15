@@ -16,16 +16,10 @@ import { BottomNav, Card, Pill } from '../components/ui';
 import { colors, radius, spacing } from '../theme';
 import { useProperties } from '../properties/useProperties';
 import { useAuth } from '../auth';
-import type { Property, PropertyStatus } from '../domain';
+import type { Property } from '../domain';
 import { countPendingInspections } from '../inspections';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Properties'>;
-
-const statusLabels: Record<PropertyStatus, string> = {
-  active: 'Active',
-  inactive: 'Inactive',
-  under_renovation: 'Renovation',
-};
 
 function lastInspectionLabel(value: string | null): string {
   if (!value) {
@@ -45,6 +39,7 @@ export function PropertiesScreen({ navigation }: Props) {
   const {
     properties,
     count,
+    offlineReadyCount,
     loading,
     refreshing,
     loadingMore,
@@ -91,8 +86,14 @@ export function PropertiesScreen({ navigation }: Props) {
               Last: {lastInspectionLabel(item.lastInspectedAt)}
             </Text>
             <Pill
-              label={statusLabels[item.status]}
-              tone={item.status === 'active' ? 'green' : 'amber'}
+              label={item.detailsCachedAt ? 'Offline ready' : 'Needs internet'}
+              tone={
+                item.detailsCachedAt
+                  ? 'green'
+                  : item.status === 'active'
+                  ? 'grey'
+                  : 'amber'
+              }
             />
           </View>
         </Card>
@@ -127,8 +128,8 @@ export function PropertiesScreen({ navigation }: Props) {
       <View style={styles.connection}>
         <View style={[styles.dot, offlineFallback && styles.offlineDot]} />
         <Text style={styles.connectionText}>
-          {offlineFallback ? 'Offline · ' : 'Offline ready · '}
-          {count} {count === 1 ? 'property' : 'properties'} on this device
+          {offlineFallback ? 'Offline · ' : 'Cache status · '}
+          {offlineReadyCount} of {count} offline ready
         </Text>
       </View>
       <FlatList
@@ -178,6 +179,7 @@ export function PropertiesScreen({ navigation }: Props) {
       <BottomNav
         active="properties"
         onProperties={() => undefined}
+        onInspections={() => navigation.navigate('InspectionHistory')}
         onSync={() => navigation.navigate('SyncQueue')}
         syncCount={syncCount}
       />

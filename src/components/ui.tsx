@@ -84,11 +84,13 @@ export function Card({
 export function BottomNav({
   active,
   onProperties,
+  onInspections,
   onSync,
   syncCount,
 }: {
-  active: 'properties' | 'sync';
+  active: 'properties' | 'inspections' | 'sync';
   onProperties: () => void;
+  onInspections: () => void;
   onSync: () => void;
   syncCount?: number;
 }) {
@@ -104,6 +106,21 @@ export function BottomNav({
           style={[styles.navLabel, active === 'properties' && styles.navActive]}
         >
           Properties
+        </Text>
+      </Pressable>
+      <Pressable style={styles.navItem} onPress={onInspections}>
+        <Text
+          style={[styles.navIcon, active === 'inspections' && styles.navActive]}
+        >
+          ≡
+        </Text>
+        <Text
+          style={[
+            styles.navLabel,
+            active === 'inspections' && styles.navActive,
+          ]}
+        >
+          Inspections
         </Text>
       </Pressable>
       <Pressable style={styles.navItem} onPress={onSync}>

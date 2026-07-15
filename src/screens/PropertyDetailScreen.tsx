@@ -121,10 +121,16 @@ export function PropertyDetailScreen({ navigation, route }: Props) {
         <Text style={styles.noticeIcon}>{offlineFallback ? '⌁' : '✓'}</Text>
         <View style={styles.noticeCopy}>
           <Text style={styles.noticeTitle}>
-            {offlineFallback ? 'Showing saved details' : 'Available offline'}
+            {property.detailsCachedAt
+              ? offlineFallback
+                ? 'Showing saved details'
+                : 'Available offline'
+              : 'Details require connection'}
           </Text>
           <Text style={styles.noticeText}>
-            {offlineFallback
+            {!property.detailsCachedAt
+              ? 'Only the property summary is saved. Reconnect to download rooms.'
+              : offlineFallback
               ? 'The latest server refresh failed. Nothing cached was removed.'
               : 'Property details and rooms are saved on this device.'}
           </Text>
@@ -152,7 +158,9 @@ export function PropertyDetailScreen({ navigation, route }: Props) {
           ))
         ) : (
           <Text style={styles.noRooms}>
-            Room details have not been cached for this property yet.
+            {property.detailsCachedAt
+              ? 'No rooms are recorded for this property.'
+              : 'Room details have not been cached for this property yet.'}
           </Text>
         )}
       </Card>

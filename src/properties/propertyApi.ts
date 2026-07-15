@@ -43,6 +43,7 @@ function normalizeProperty(dto: PropertyDto, cachedAt: number): Property {
     status: dto.status,
     version: dto.version,
     cachedAt,
+    detailsCachedAt: null,
   };
 }
 
@@ -77,5 +78,5 @@ export async function fetchPropertyDetail(id: string): Promise<Property> {
     floor: room.floor,
   }));
 
-  return { ...property, rooms };
+  return { ...property, rooms, detailsCachedAt: Date.now() };
 }

@@ -21,6 +21,7 @@ interface PropertyRow extends QueryResultRow {
   status: string;
   version: number;
   cached_at: number;
+  details_cached_at: number | null;
 }
 
 interface RoomRow extends QueryResultRow {
@@ -42,6 +43,7 @@ function propertyFromRow(row: Record<string, SQLiteValue>): Property {
     status: typed.status as PropertyStatus,
     version: typed.version,
     cachedAt: typed.cached_at,
+    detailsCachedAt: typed.details_cached_at,
   };
 }
 
@@ -65,6 +67,10 @@ ON CONFLICT(id) DO UPDATE SET
   region = excluded.region,
   last_inspected_at = excluded.last_inspected_at,
   status = excluded.status,
+  details_cached_at = CASE
+    WHEN properties.version != excluded.version THEN NULL
+    ELSE properties.details_cached_at
+  END,
   version = excluded.version,
   cached_at = excluded.cached_at`;
 
@@ -104,6 +110,10 @@ export async function cachePropertyDetail(property: Property): Promise<void> {
   const db = database();
   await db.transaction(async tx => {
     await tx.executeAsync(UPSERT_PROPERTY, propertyParams(property));
+    await tx.executeAsync(
+      'UPDATE properties SET details_cached_at = ? WHERE id = ?',
+      [property.detailsCachedAt ?? Date.now(), property.id],
+    );
 
     for (const room of property.rooms ?? []) {
       await tx.executeAsync(
@@ -157,6 +167,29 @@ export async function countCachedProperties(): Promise<number> {
   );
   const count = result.results[0]?.count;
   return typeof count === 'number' ? count : 0;
+}
+
+export async function countOfflineReadyProperties(): Promise<number> {
+  const result = await database().executeAsync(
+    'SELECT COUNT(*) AS count FROM properties WHERE details_cached_at IS NOT NULL',
+  );
+  const count = result.results[0]?.count;
+  return typeof count === 'number' ? count : 0;
+}
+
+export async function listPropertyIdsMissingDetails(
+  propertyIds: string[],
+): Promise<string[]> {
+  if (!propertyIds.length) return [];
+  const placeholders = propertyIds.map(() => '?').join(', ');
+  const result = await database().executeAsync(
+    `SELECT id FROM properties
+     WHERE details_cached_at IS NULL AND id IN (${placeholders})`,
+    propertyIds,
+  );
+  return result.results.flatMap(row =>
+    typeof row.id === 'string' ? [row.id] : [],
+  );
 }
 
 export async function getCachedProperty(id: string): Promise<Property | null> {

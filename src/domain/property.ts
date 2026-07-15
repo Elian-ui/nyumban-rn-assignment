@@ -20,6 +20,7 @@ export interface Property {
   version: number;
   rooms?: Room[];
   cachedAt: number;
+  detailsCachedAt: number | null;
 }
 
 export interface PropertyFilters {

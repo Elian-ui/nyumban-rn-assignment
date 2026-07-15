@@ -19,6 +19,7 @@ import { PropertyDetailScreen } from './src/screens/PropertyDetailScreen';
 import { InspectionScreen } from './src/screens/InspectionScreen';
 import { RoomInspectionScreen } from './src/screens/RoomInspectionScreen';
 import { SyncQueueScreen } from './src/screens/SyncQueueScreen';
+import { InspectionHistoryScreen } from './src/screens/InspectionHistoryScreen';
 import { initializeDatabase } from './src/database';
 import { AuthProvider, useAuth } from './src/auth';
 import { SyncCoordinator } from './src/sync';
@@ -74,6 +75,11 @@ function AppNavigator() {
             <Stack.Screen
               name="SyncQueue"
               component={SyncQueueScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="InspectionHistory"
+              component={InspectionHistoryScreen}
               options={{ headerShown: false }}
             />
           </>
