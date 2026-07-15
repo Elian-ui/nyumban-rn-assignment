@@ -23,9 +23,9 @@ import { colors, radius, spacing } from '../theme';
 import type { RoomCondition } from '../domain';
 import {
   getInspectionDraft,
-  removeRoomPhoto,
+  persistRoomPhoto,
+  removePersistedRoomPhoto,
   saveRoomEntry,
-  saveRoomPhoto,
 } from '../inspections';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoomInspection'>;
@@ -121,19 +121,16 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
       return;
     }
 
-    setPhoto(selectedPhoto);
     setSaveState('saving');
-    saveRoomPhoto({
-      inspectionId: route.params.inspectionId,
-      roomId: route.params.roomId,
-      localUri: selectedPhoto.uri,
-      fileName: selectedPhoto.fileName ?? null,
-      mimeType: selectedPhoto.type ?? null,
-      fileSize: selectedPhoto.fileSize ?? null,
-      width: selectedPhoto.width ?? null,
-      height: selectedPhoto.height ?? null,
-    }).then(
-      () => setSaveState('saved'),
+    persistRoomPhoto(
+      route.params.inspectionId,
+      route.params.roomId,
+      selectedPhoto,
+    ).then(
+      persisted => {
+        setPhoto(persisted);
+        setSaveState('saved');
+      },
       () => {
         setPhoto(undefined);
         setSaveState('error');
@@ -182,7 +179,10 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
   async function removePhoto() {
     setSaveState('saving');
     try {
-      await removeRoomPhoto(route.params.inspectionId, route.params.roomId);
+      await removePersistedRoomPhoto(
+        route.params.inspectionId,
+        route.params.roomId,
+      );
       setPhoto(undefined);
       setSaveState('saved');
     } catch {

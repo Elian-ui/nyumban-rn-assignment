@@ -303,3 +303,95 @@ export async function queueInspection(inspectionId: string): Promise<void> {
     [Math.floor(now / 1000), now, inspectionId],
   );
 }
+
+export async function listSyncInspections(): Promise<
+  Array<InspectionDraft & { propertyName: string }>
+> {
+  const result = await database().executeAsync(
+    `SELECT inspections.id, properties.name AS property_name
+     FROM inspections INNER JOIN properties ON properties.id = inspections.property_id
+     WHERE inspections.status != 'draft'
+     ORDER BY inspections.updated_at DESC`,
+  );
+  const items: Array<InspectionDraft & { propertyName: string }> = [];
+  for (const row of result.results) {
+    if (typeof row.id !== 'string' || typeof row.property_name !== 'string')
+      continue;
+    const draft = await getInspectionDraft(row.id);
+    if (draft) items.push({ ...draft, propertyName: row.property_name });
+  }
+  return items;
+}
+
+export async function setInspectionSyncState(
+  inspectionId: string,
+  status: InspectionSyncStatus,
+  options: {
+    serverId?: string;
+    serverCreatedAt?: number;
+    serverUpdatedAt?: number;
+    errorCode?: string | null;
+    errorDetails?: unknown;
+    conflictProperty?: unknown;
+  } = {},
+): Promise<void> {
+  await database().executeAsync(
+    `UPDATE inspections SET status = ?, server_id = COALESCE(?, server_id),
+      server_created_at = COALESCE(?, server_created_at),
+      server_updated_at = COALESCE(?, server_updated_at), error_code = ?,
+      error_details_json = ?, conflict_property_json = ?, updated_at = ?
+     WHERE id = ?`,
+    [
+      status,
+      options.serverId ?? null,
+      options.serverCreatedAt ?? null,
+      options.serverUpdatedAt ?? null,
+      options.errorCode ?? null,
+      options.errorDetails ? JSON.stringify(options.errorDetails) : null,
+      options.conflictProperty
+        ? JSON.stringify(options.conflictProperty)
+        : null,
+      Date.now(),
+      inspectionId,
+    ],
+  );
+}
+
+export async function setPhotoSyncState(
+  photoId: string,
+  status: PhotoSyncStatus,
+  server?: { id: string; url: string },
+  errorCode: string | null = null,
+): Promise<void> {
+  await database().executeAsync(
+    `UPDATE photo_evidence SET status = ?, server_id = COALESCE(?, server_id),
+      server_url = COALESCE(?, server_url), error_code = ?, updated_at = ? WHERE id = ?`,
+    [
+      status,
+      server?.id ?? null,
+      server?.url ?? null,
+      errorCode,
+      Date.now(),
+      photoId,
+    ],
+  );
+}
+
+export async function recoverInterruptedSync(): Promise<void> {
+  await database().transaction(async tx => {
+    await tx.executeAsync(
+      "UPDATE inspections SET status = 'queued', error_code = 'interrupted' WHERE status = 'syncing'",
+    );
+    await tx.executeAsync(
+      "UPDATE photo_evidence SET status = 'local', error_code = 'interrupted' WHERE status = 'uploading'",
+    );
+  });
+}
+
+export async function countPendingInspections(): Promise<number> {
+  const result = await database().executeAsync(
+    "SELECT COUNT(*) AS count FROM inspections WHERE status != 'draft' AND status != 'synced'",
+  );
+  const count = result.results[0]?.count;
+  return typeof count === 'number' ? count : 0;
+}

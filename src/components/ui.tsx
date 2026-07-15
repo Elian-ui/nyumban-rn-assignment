@@ -85,10 +85,12 @@ export function BottomNav({
   active,
   onProperties,
   onSync,
+  syncCount,
 }: {
   active: 'properties' | 'sync';
   onProperties: () => void;
   onSync: () => void;
+  syncCount?: number;
 }) {
   return (
     <View style={styles.bottomNav}>
@@ -109,9 +111,13 @@ export function BottomNav({
           <Text style={[styles.navIcon, active === 'sync' && styles.navActive]}>
             ↻
           </Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>2</Text>
-          </View>
+          {syncCount ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {syncCount > 99 ? '99+' : syncCount}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Text style={[styles.navLabel, active === 'sync' && styles.navActive]}>
           Sync

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/types';
 import { BottomNav, Card, Pill } from '../components/ui';
@@ -16,6 +17,7 @@ import { colors, radius, spacing } from '../theme';
 import { useProperties } from '../properties/useProperties';
 import { useAuth } from '../auth';
 import type { Property, PropertyStatus } from '../domain';
+import { countPendingInspections } from '../inspections';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Properties'>;
 
@@ -38,6 +40,7 @@ function lastInspectionLabel(value: string | null): string {
 
 export function PropertiesScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
+  const [syncCount, setSyncCount] = useState(0);
   const { session } = useAuth();
   const {
     properties,
@@ -50,6 +53,12 @@ export function PropertiesScreen({ navigation }: Props) {
     refresh,
     loadMore,
   } = useProperties(query);
+
+  useFocusEffect(
+    useCallback(() => {
+      countPendingInspections().then(setSyncCount);
+    }, []),
+  );
 
   function renderProperty({ item }: { item: Property }) {
     return (
@@ -170,6 +179,7 @@ export function PropertiesScreen({ navigation }: Props) {
         active="properties"
         onProperties={() => undefined}
         onSync={() => navigation.navigate('SyncQueue')}
+        syncCount={syncCount}
       />
     </SafeAreaView>
   );

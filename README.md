@@ -20,10 +20,9 @@ Implemented:
 - Durable inspection drafts and per-room progress from SQLite.
 - Autosaved room conditions, notes, and local photo metadata.
 - Local completion validation and a durable queued state.
-
-Still using static data:
-
-- Sync queue content.
+- App-owned photo storage that survives cache cleanup and process restarts.
+- Ordered photo upload and inspection submission from the local queue.
+- Stable idempotency keys, transient retries, conflicts, and rejection states.
 
 ## Running the app
 
@@ -128,10 +127,16 @@ Starting an inspection creates a local inspection record and one room-entry reco
 
 Inspection progress is calculated from saved room entries rather than component state. Completing an inspection is only enabled after every room is complete, and completion moves the record to `queued` with its original property version and stable idempotency key intact.
 
+### Photo storage and synchronization
+
+Selected images are copied into the app documents directory before their database records are updated. Replacing or removing evidence also removes the previous app-owned file. This avoids depending on temporary camera or picker locations that the operating system may clear.
+
+The sync worker is single-flight and processes inspections sequentially. Local photos upload first and each returned server ID is saved before the inspection is submitted. Inspection retries reuse the original idempotency key. `429`, `500`, and `503` responses receive bounded retry with `Retry-After` support; an exhausted transient failure returns the inspection to `queued` without deleting any local data.
+
+Server conflicts and permanent validation or quota errors move records to explicit `conflict` or `rejected` states. Interrupted `syncing` and `uploading` states are recovered to retryable local states on the next run.
+
 ## Deliberately not built yet
 
-- Photo upload and inspection submission workers.
-- Retry policy for `429`, `500`, and `503` responses.
 - Conflict resolution UI for stale property versions.
 - Reconciliation against server inspection history.
 - Background synchronization.
@@ -139,12 +144,11 @@ Inspection progress is calculated from saved room entries rather than component 
 
 ## Known issues
 
-- Sync content is still mock data.
-- The sync screen is visual only.
-- Photo metadata is durable, but picker files still need to be copied from temporary locations into app-owned storage before the photo workflow can be considered crash-safe.
+- Conflict and rejection states are visible but do not yet have guided resolution actions.
+- Sync currently runs from the manual Sync now action; foreground and connectivity triggers are not wired yet.
 - Jest configuration is incomplete as described above.
 - Native Android compilation of the SQLite dependency has not yet been verified in this environment because Gradle cache access was not granted.
 
 ## Next implementation slice
 
-The next slice is durable photo-file storage followed by the ordered sync worker: upload local photos first, store their server IDs, then submit the inspection with its stable idempotency key. Queue, retry, rejection, and conflict states will replace the static sync screen content.
+The next slice is reconciliation against `GET /inspections?agentId=`, followed by foreground and connectivity sync triggers. Conflict and validation states also need guided actions that preserve the original local inspection while showing the current server truth.
