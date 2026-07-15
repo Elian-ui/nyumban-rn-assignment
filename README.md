@@ -29,16 +29,29 @@ Implemented:
 - Reconciliation against the agent's independently fetched server history.
 - Unified inspection history for local work and reconciled server records.
 - Guided recovery for property-version conflicts and server rejections.
+- Android upload-key signing configuration for release APK builds.
 
 ## Running the app
 
-Requirements:
+### Prerequisites
 
 - Node.js 22.11 or newer.
-- React Native Android development environment.
+- JDK 17.
+- Android Studio with the Android SDK, platform tools, and an emulator image.
+- `ANDROID_HOME` configured and `adb` available on the command line.
 - A personal Nyumban assessment key.
 
-Install dependencies:
+Confirm the local tools before continuing:
+
+```sh
+node --version
+java -version
+adb version
+```
+
+### Install and configure
+
+From the repository root, install JavaScript dependencies:
 
 ```sh
 npm install
@@ -58,12 +71,27 @@ ASSESSMENT_KEY=your-personal-key
 
 The `.env` file is ignored by Git. The key is necessarily present in the compiled client application, but it is not stored in this repository.
 
-Run Android:
+### Run a debug build on Android
+
+Start an Android emulator from Android Studio, or connect a physical device with USB debugging enabled. Confirm that Android Debug Bridge can see it:
+
+```sh
+adb devices
+```
+
+The device must be listed with the state `device`. Start Metro from the repository root in the first terminal:
 
 ```sh
 npm start
+```
+
+Keep Metro running. In a second terminal, install and launch the debug application:
+
+```sh
 npm run android
 ```
+
+The debug build uses `android/app/debug.keystore` and connects to Metro for its JavaScript bundle.
 
 The shared test credentials are:
 
@@ -71,6 +99,56 @@ The shared test credentials are:
 agent@nyumban.test
 Kireka2026!
 ```
+
+The first authenticated property refresh downloads summary records and then prefetches room details for that loaded page. A property marked `Offline ready` can be opened and inspected without connectivity.
+
+### Build a signed release
+
+The upload keystore must remain outside version control. A keystore placed at `android/app/my-upload-key.keystore` is already covered by the repository's `*.keystore` ignore rule. Keep a secure backup of the file, alias, and passwords because future releases must use the same signing identity.
+
+Store the signing values in the user-level `~/.gradle/gradle.properties`, not the repository's tracked `android/gradle.properties`:
+
+```properties
+NYUMBAN_UPLOAD_STORE_FILE=my-upload-key.keystore
+NYUMBAN_UPLOAD_KEY_ALIAS=your-key-alias
+NYUMBAN_UPLOAD_STORE_PASSWORD=your-store-password
+NYUMBAN_UPLOAD_KEY_PASSWORD=your-key-password
+```
+
+The keystore filename and key alias are separate values. Check the alias when uncertain:
+
+```sh
+keytool -list -v -keystore android/app/my-upload-key.keystore
+```
+
+Build the installable release APK from the repository root:
+
+```sh
+cd android
+./gradlew assembleRelease --no-parallel
+cd ..
+```
+
+Generated artifact:
+
+```text
+android/app/build/outputs/apk/release/app-release.apk
+```
+
+Install the APK directly on a connected device or emulator:
+
+```sh
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
+
+If Android reports `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the installed app uses a different signing key, usually the debug key. Uninstalling it deletes that installation's local drafts and cached data, so preserve anything needed before running:
+
+```sh
+adb uninstall com.nyumban
+adb install android/app/build/outputs/apk/release/app-release.apk
+```
+
+The release APK contains its JavaScript bundle and does not require Metro.
 
 ## Verification
 
@@ -166,14 +244,8 @@ Completed inspections remain durable in SQLite when the process is terminated. S
 ## Deliberately not built yet
 
 - Background execution while the application is fully suspended.
-- Final release APK and signing configuration.
 
 ## Known issues
 
 - Sync is triggered automatically while the process is running, but Android background scheduling while fully suspended is not implemented.
 - Jest configuration is incomplete as described above.
-- Native Android compilation of the SQLite dependency has not yet been verified in this environment because Gradle cache access was not granted.
-
-## Next implementation slice
-
-The next slice is test infrastructure and Android release verification. Terminated-process background scheduling and the final assessment APK also remain before submission.
