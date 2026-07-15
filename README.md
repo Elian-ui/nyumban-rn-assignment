@@ -1,8 +1,8 @@
 # Nyumban Field
 
-I built Nyumban Field as an offline-first React Native application for agents performing residential property inspections in unreliable network conditions.
+Nyumban Field is an offline-first React Native application for agents performing residential property inspections in unreliable network conditions.
 
-I am maintaining this README alongside the implementation. It records the decisions I made, the trade-offs I accepted, unfinished work, and known problems rather than serving only as a feature list.
+This README is maintained alongside the implementation. It records the decisions made, accepted trade-offs, unfinished work, and known problems rather than serving only as a feature list.
 
 ## Current status
 
@@ -17,10 +17,13 @@ Implemented:
 - Authenticated property retrieval with cursor pagination.
 - Transactional property and room caching in SQLite.
 - Local property search and cache-first property detail.
+- Durable inspection drafts and per-room progress from SQLite.
+- Autosaved room conditions, notes, and local photo metadata.
+- Local completion validation and a durable queued state.
 
 Still using static data:
 
-- Inspection progress and sync queue.
+- Sync queue content.
 
 ## Running the app
 
@@ -48,7 +51,7 @@ Set the issued key in `.env`:
 ASSESSMENT_KEY=your-personal-key
 ```
 
-The `.env` file is ignored by Git. I am aware that the key is necessarily present in the compiled client application, but I do not store it in this repository.
+The `.env` file is ignored by Git. The key is necessarily present in the compiled client application, but it is not stored in this repository.
 
 Run Android:
 
@@ -72,56 +75,61 @@ npx tsc --noEmit
 npm test -- --runInBand
 ```
 
-Jest currently fails before executing tests because the generated scaffold references a missing `@react-native/jest-preset`. I have kept this visible as known work instead of hiding it by removing the test command.
+Jest currently fails before executing tests because the generated scaffold references a missing `@react-native/jest-preset`. This remains visible as known work instead of being hidden by removing the test command.
 
 ## Decisions and trade-offs
 
 ### Bare React Native
 
-I chose the React Native community CLI because the app needs native dependencies for SQLite, secure credential storage, navigation screens, and camera/library access.
+The React Native community CLI was chosen because the app needs native dependencies for SQLite, secure credential storage, navigation screens, and camera/library access.
 
 ### SQLite instead of a large AsyncStorage document
 
-The API contains roughly 5,000 properties. I chose Nitro SQLite because it provides indexed local queries, transactions, foreign keys, and asynchronous work off the JavaScript thread. AsyncStorage remains installed, but I do not use it as the source of truth for portfolio or inspection data.
+The API contains roughly 5,000 properties. Nitro SQLite was chosen because it provides indexed local queries, transactions, foreign keys, and asynchronous work off the JavaScript thread. AsyncStorage remains installed but is not the source of truth for portfolio or inspection data.
 
-I separated the schema into:
+The schema is separated into:
 
 - Properties and rooms.
 - Inspections and per-room entries.
 - Local photo evidence and server upload identifiers.
 - Local sync status, validation failures, and conflict snapshots.
 
-I use SQLite's `user_version` for migrations and execute each migration transactionally. I also enable WAL mode and a busy timeout during startup.
+Migrations use SQLite's `user_version` and execute transactionally. WAL mode and a busy timeout are enabled during startup.
 
 ### Local-first inspection state
 
-My intended data path is:
+The intended data path is:
 
 ```text
 Screens → SQLite → durable sync queue → API
 ```
 
-I will not treat a network response as the working copy of an inspection. Draft edits must first be committed locally so the app can survive termination, airplane mode, and ambiguous server responses.
+A network response is not treated as the working copy of an inspection. Draft edits must first be committed locally so the app can survive termination, airplane mode, and ambiguous server responses.
 
 ### Authentication and rotating refresh tokens
 
-I store access and refresh tokens in Android Keystore/iOS Keychain rather than plain AsyncStorage. Refresh operations share one in-flight promise. This prevents two callers from spending the same single-use refresh token and revoking the server session.
+Access and refresh tokens are stored in Android Keystore/iOS Keychain rather than plain AsyncStorage. Refresh operations share one in-flight promise. This prevents two callers from spending the same single-use refresh token and revoking the server session.
 
-The app restores the stored session on startup and refreshes one minute before access-token expiry. If restoration fails, I clear the local session credentials and return the agent to login.
+The app restores the stored session on startup and refreshes one minute before access-token expiry. A failed restoration clears local session credentials and returns the agent to login.
 
 ### Photo scope
 
-I currently allow one photo per room. This keeps memory use, upload volume, and the API's approximately 200-photo account quota bounded. I compress and resize photos through the picker and reject files over the API's 5 MB limit locally.
+The current UI allows one photo per room. This keeps memory use, upload volume, and the API's approximately 200-photo account quota bounded. Photos are compressed and resized through the picker, and files over the API's 5 MB limit are rejected locally.
 
 ### Property cache and pagination
 
-I render the cached property list first, then refresh the first API page when a session is available. Each page is upserted in a transaction and its opaque next cursor is stored in database metadata. Scrolling requests the next page, while pull-to-refresh starts again at the first page without deleting older cached records.
+The cached property list renders first, followed by a refresh of the first API page when a session is available. Each page is upserted in a transaction and its opaque next cursor is stored in database metadata. Scrolling requests the next page, while pull-to-refresh starts again at the first page without deleting older cached records.
 
-Search queries SQLite rather than depending on the network. If a request fails, I keep the existing cache and label the screen as offline instead of replacing valid data with an empty state. Opening a property follows the same approach: render its cached record, request fresh detail and rooms, then update the screen from SQLite.
+Search queries SQLite rather than depending on the network. A failed request keeps the existing cache and labels the screen as offline instead of replacing valid data with an empty state. Opening a property follows the same approach: render its cached record, request fresh detail and rooms, then update the screen from SQLite.
 
-## What I have deliberately not built yet
+### Durable inspection drafts
 
-- Durable inspection draft repositories.
+Starting an inspection creates a local inspection record and one room-entry record per cached room in a single transaction. Reopening the property resumes the latest draft instead of creating another one. Room condition and note changes autosave to SQLite, while the explicit Save button provides a retry path when a local write fails.
+
+Inspection progress is calculated from saved room entries rather than component state. Completing an inspection is only enabled after every room is complete, and completion moves the record to `queued` with its original property version and stable idempotency key intact.
+
+## Deliberately not built yet
+
 - Photo upload and inspection submission workers.
 - Retry policy for `429`, `500`, and `503` responses.
 - Conflict resolution UI for stale property versions.
@@ -131,12 +139,12 @@ Search queries SQLite rather than depending on the network. If a request fails, 
 
 ## Known issues
 
-- Inspection and sync content is still mock data.
-- Room condition selection and photo choice are not yet persisted to SQLite.
+- Sync content is still mock data.
 - The sync screen is visual only.
+- Photo metadata is durable, but picker files still need to be copied from temporary locations into app-owned storage before the photo workflow can be considered crash-safe.
 - Jest configuration is incomplete as described above.
 - Native Android compilation of the SQLite dependency has not yet been verified in this environment because Gradle cache access was not granted.
 
-## My next implementation slice
+## Next implementation slice
 
-My next slice is durable inspection drafts and per-room entries. I will make condition, notes, and photo selections commit to SQLite immediately, then drive the progress screen from that local state instead of mock activity.
+The next slice is durable photo-file storage followed by the ordered sync worker: upload local photos first, store their server IDs, then submit the inspection with its stable idempotency key. Queue, retry, rejection, and conflict states will replace the static sync screen content.

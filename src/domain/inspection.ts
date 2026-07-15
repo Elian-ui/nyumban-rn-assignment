@@ -56,3 +56,9 @@ export interface PhotoEvidence {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface InspectionDraft {
+  inspection: Inspection;
+  entries: RoomEntry[];
+  photos: PhotoEvidence[];
+}

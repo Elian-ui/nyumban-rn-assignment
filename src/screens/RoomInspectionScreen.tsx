@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -19,12 +20,80 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import { PrimaryButton } from '../components/ui';
 import { colors, radius, spacing } from '../theme';
+import type { RoomCondition } from '../domain';
+import {
+  getInspectionDraft,
+  removeRoomPhoto,
+  saveRoomEntry,
+  saveRoomPhoto,
+} from '../inspections';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoomInspection'>;
 
 export function RoomInspectionScreen({ navigation, route }: Props) {
-  const isKitchen = route.params.roomId === 'rm_2';
   const [photo, setPhoto] = useState<Asset>();
+  const [condition, setCondition] = useState<RoomCondition | null>(null);
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>(
+    'saved',
+  );
+
+  useEffect(() => {
+    getInspectionDraft(route.params.inspectionId).then(
+      draft => {
+        const entry = draft?.entries.find(
+          item => item.roomId === route.params.roomId,
+        );
+        const savedPhoto = draft?.photos.find(
+          item => item.roomEntryId === entry?.id,
+        );
+        setCondition(entry?.condition ?? null);
+        setNotes(entry?.notes ?? '');
+        setPhoto(
+          savedPhoto
+            ? {
+                uri: savedPhoto.localUri,
+                fileName: savedPhoto.fileName ?? undefined,
+                type: savedPhoto.mimeType ?? undefined,
+                fileSize: savedPhoto.fileSize ?? undefined,
+                width: savedPhoto.width ?? undefined,
+                height: savedPhoto.height ?? undefined,
+              }
+            : undefined,
+        );
+        setLoading(false);
+      },
+      () => {
+        setLoading(false);
+        setSaveState('error');
+      },
+    );
+  }, [route.params.inspectionId, route.params.roomId]);
+
+  useEffect(() => {
+    if (loading || !condition) return;
+    const timer = setTimeout(() => {
+      setSaveState('saving');
+      saveRoomEntry({
+        inspectionId: route.params.inspectionId,
+        roomId: route.params.roomId,
+        condition,
+        notes,
+      }).then(
+        () => setSaveState('saved'),
+        () => setSaveState('error'),
+      );
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [
+    condition,
+    loading,
+    notes,
+    route.params.inspectionId,
+    route.params.roomId,
+  ]);
 
   function usePickerResponse(response: ImagePickerResponse) {
     if (response.didCancel) {
@@ -53,6 +122,27 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
     }
 
     setPhoto(selectedPhoto);
+    setSaveState('saving');
+    saveRoomPhoto({
+      inspectionId: route.params.inspectionId,
+      roomId: route.params.roomId,
+      localUri: selectedPhoto.uri,
+      fileName: selectedPhoto.fileName ?? null,
+      mimeType: selectedPhoto.type ?? null,
+      fileSize: selectedPhoto.fileSize ?? null,
+      width: selectedPhoto.width ?? null,
+      height: selectedPhoto.height ?? null,
+    }).then(
+      () => setSaveState('saved'),
+      () => {
+        setPhoto(undefined);
+        setSaveState('error');
+        Alert.alert(
+          'Could not save photo',
+          'The local photo reference was not saved.',
+        );
+      },
+    );
   }
 
   function takePhoto() {
@@ -89,6 +179,60 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
     ]);
   }
 
+  async function removePhoto() {
+    setSaveState('saving');
+    try {
+      await removeRoomPhoto(route.params.inspectionId, route.params.roomId);
+      setPhoto(undefined);
+      setSaveState('saved');
+    } catch {
+      setSaveState('error');
+      Alert.alert(
+        'Could not remove photo',
+        'The saved evidence was not changed.',
+      );
+    }
+  }
+
+  async function saveRoom() {
+    if (!condition) {
+      Alert.alert(
+        'Choose a condition',
+        'Select good, fair, or poor before saving.',
+      );
+      return;
+    }
+    setSaving(true);
+    setSaveState('saving');
+    try {
+      await saveRoomEntry({
+        inspectionId: route.params.inspectionId,
+        roomId: route.params.roomId,
+        condition,
+        notes,
+      });
+      setSaveState('saved');
+      navigation.goBack();
+    } catch {
+      setSaveState('error');
+      Alert.alert(
+        'Could not save room',
+        'Your changes could not be written locally.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingState}>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.photoHelp}>Loading saved room…</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       style={styles.screen}
@@ -108,10 +252,11 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
           ['Fair', 'Minor attention needed', colors.amberSoft, colors.amber],
           ['Poor', 'Repair or replacement needed', colors.redSoft, colors.red],
         ].map(([label, help, bg, color]) => {
-          const selected = isKitchen && label === 'Fair';
+          const selected = condition === label.toLowerCase();
           return (
             <Pressable
               key={label}
+              onPress={() => setCondition(label.toLowerCase() as RoomCondition)}
               style={[styles.condition, selected && styles.conditionSelected]}
             >
               <View style={[styles.conditionIcon, { backgroundColor: bg }]}>
@@ -133,9 +278,8 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
       </Text>
       <TextInput
         style={styles.notes}
-        defaultValue={
-          isKitchen ? 'Tap is leaking slowly beneath the sink.' : undefined
-        }
+        value={notes}
+        onChangeText={setNotes}
         placeholder="Describe damage, wear, or anything the office should know…"
         placeholderTextColor={colors.muted}
         multiline
@@ -151,13 +295,13 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
             <View style={styles.previewCopy}>
               <Text style={styles.previewTitle}>Photo ready</Text>
               <Text style={styles.photoHelp} numberOfLines={1}>
-                {photo.fileName ?? 'Room evidence'} · Saved on this device
+                {photo.fileName ?? 'Room evidence'} · Local evidence
               </Text>
             </View>
             <Pressable onPress={showPhotoOptions} hitSlop={8}>
               <Text style={styles.photoAction}>Replace</Text>
             </Pressable>
-            <Pressable onPress={() => setPhoto(undefined)} hitSlop={8}>
+            <Pressable onPress={removePhoto} hitSlop={8}>
               <Text style={styles.removeAction}>Remove</Text>
             </Pressable>
           </View>
@@ -173,9 +317,17 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
           </Text>
         </Pressable>
       )}
-      <PrimaryButton label="Save room" onPress={() => navigation.goBack()} />
+      <PrimaryButton
+        label={saving ? 'Saving…' : 'Save room'}
+        onPress={saveRoom}
+        disabled={saving || !condition}
+      />
       <Text style={styles.saved}>
-        Changes save automatically on this device.
+        {saveState === 'saving'
+          ? 'Saving changes on this device…'
+          : saveState === 'error'
+          ? 'Changes are not saved. Try Save room again.'
+          : 'Changes are saved on this device.'}
       </Text>
     </ScrollView>
   );
@@ -183,6 +335,13 @@ export function RoomInspectionScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas },
+  loadingState: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
   content: { padding: spacing.lg, paddingBottom: 40 },
   eyebrow: {
     fontSize: 11,
