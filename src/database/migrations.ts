@@ -134,4 +134,25 @@ export const migrations: Migration[] = [
       },
     ],
   },
+  {
+    version: 3,
+    statements: [
+      {
+        query: `CREATE TABLE IF NOT EXISTS server_inspections (
+          id TEXT PRIMARY KEY NOT NULL,
+          property_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          completed_at INTEGER NOT NULL,
+          created INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          reconciled_at INTEGER NOT NULL
+        )`,
+      },
+      {
+        query:
+          'CREATE INDEX IF NOT EXISTS idx_server_inspections_property ON server_inspections(property_id, updated_at)',
+      },
+    ],
+  },
 ];

@@ -1,1 +1,2 @@
-export { syncQueuedInspections } from './syncWorker';
+export { SyncCoordinator } from './SyncCoordinator';
+export { runSyncCycle } from './syncCycle';

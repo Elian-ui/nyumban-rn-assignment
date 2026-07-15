@@ -23,6 +23,8 @@ Implemented:
 - App-owned photo storage that survives cache cleanup and process restarts.
 - Ordered photo upload and inspection submission from the local queue.
 - Stable idempotency keys, transient retries, conflicts, and rejection states.
+- Automatic sync triggers on startup, foreground, and connectivity return.
+- Reconciliation against the agent's independently fetched server history.
 
 ## Running the app
 
@@ -135,20 +137,31 @@ The sync worker is single-flight and processes inspections sequentially. Local p
 
 Server conflicts and permanent validation or quota errors move records to explicit `conflict` or `rejected` states. Interrupted `syncing` and `uploading` states are recovered to retryable local states on the next run.
 
+Connectivity state is treated as a trigger rather than proof that the API is reachable. Sync runs through one shared cycle on authenticated startup, when the app returns to the foreground, and when NetInfo reports a usable connection. Request failures remain authoritative and are handled by the queue policy above.
+
+After local submissions are processed, reconciliation pages through `GET /inspections?agentId=` and stores the server's independent view in SQLite. Known local server IDs are confirmed as synced without relying solely on the state left by the original request.
+
+### Terminated-process background sync
+
+Android WorkManager and Headless JS were considered for syncing while the application process is terminated. That implementation was deliberately deferred. The current foreground worker and token refresh guards are single-flight within one JavaScript runtime. A foreground runtime and a separately started headless runtime could otherwise refresh with the same single-use token concurrently, causing the API to revoke the entire session.
+
+A safe implementation needs a cross-runtime SQLite lease for synchronization and token refresh, a native WorkManager scheduler with a network constraint, a Headless JS service, and a completion bridge so WorkManager receives the real JavaScript result. Adding only a connectivity receiver or starting a headless service without those controls would make delivery appear more reliable while introducing duplicate work and session-revocation failures.
+
+Completed inspections remain durable in SQLite when the process is terminated. Sync resumes on the next authenticated launch, foreground transition, connectivity event received while the process is alive, or manual Sync now action. This preserves data and reports queue state honestly, while terminated-process scheduling remains a documented next step.
+
 ## Deliberately not built yet
 
 - Conflict resolution UI for stale property versions.
-- Reconciliation against server inspection history.
-- Background synchronization.
+- Background execution while the application is fully suspended.
 - Final release APK and signing configuration.
 
 ## Known issues
 
 - Conflict and rejection states are visible but do not yet have guided resolution actions.
-- Sync currently runs from the manual Sync now action; foreground and connectivity triggers are not wired yet.
+- Sync is triggered automatically while the process is running, but Android background scheduling while fully suspended is not implemented.
 - Jest configuration is incomplete as described above.
 - Native Android compilation of the SQLite dependency has not yet been verified in this environment because Gradle cache access was not granted.
 
 ## Next implementation slice
 
-The next slice is reconciliation against `GET /inspections?agentId=`, followed by foreground and connectivity sync triggers. Conflict and validation states also need guided actions that preserve the original local inspection while showing the current server truth.
+The next slice is guided conflict and validation handling that preserves the original inspection while showing the current server truth. Test infrastructure, Android release verification, and the final assessment APK also remain before submission.

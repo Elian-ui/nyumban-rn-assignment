@@ -21,6 +21,7 @@ import { RoomInspectionScreen } from './src/screens/RoomInspectionScreen';
 import { SyncQueueScreen } from './src/screens/SyncQueueScreen';
 import { initializeDatabase } from './src/database';
 import { AuthProvider, useAuth } from './src/auth';
+import { SyncCoordinator } from './src/sync';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -38,6 +39,7 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
+      <SyncCoordinator />
       <Stack.Navigator
         screenOptions={{
           headerShadowVisible: false,

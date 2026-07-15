@@ -20,7 +20,8 @@ import {
 import { colors, spacing } from '../theme';
 import { listSyncInspections } from '../inspections';
 import type { InspectionDraft, InspectionSyncStatus } from '../domain';
-import { syncQueuedInspections } from '../sync';
+import { runSyncCycle } from '../sync';
+import { useAuth } from '../auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SyncQueue'>;
 type SyncItem = InspectionDraft & { propertyName: string };
@@ -62,6 +63,7 @@ function itemMessage(item: SyncItem): string {
 }
 
 export function SyncQueueScreen({ navigation }: Props) {
+  const { session } = useAuth();
   const [items, setItems] = useState<SyncItem[]>([]);
   const [syncing, setSyncing] = useState(false);
 
@@ -78,7 +80,7 @@ export function SyncQueueScreen({ navigation }: Props) {
   async function syncNow() {
     setSyncing(true);
     try {
-      await syncQueuedInspections();
+      if (session) await runSyncCycle(session.agent.id);
     } finally {
       await load();
       setSyncing(false);

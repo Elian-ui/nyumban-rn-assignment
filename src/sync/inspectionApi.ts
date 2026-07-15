@@ -12,6 +12,26 @@ interface InspectionSubmitResponse {
   updated_at: number;
 }
 
+export interface ServerInspection {
+  id: string;
+  propertyId: string;
+  type: string;
+  rooms: Array<{
+    roomId: string;
+    condition: string;
+    notes: string;
+    photoIds: string[];
+  }>;
+  completedAt: number;
+  created: number;
+  updated_at: number;
+}
+
+interface InspectionPageResponse {
+  data: ServerInspection[];
+  next_cursor: string | null;
+}
+
 export async function uploadInspectionPhoto(input: {
   uri: string;
   fileName: string | null;
@@ -59,4 +79,13 @@ export async function submitInspection(
       completedAt: draft.inspection.completedAt,
     }),
   });
+}
+
+export async function fetchServerInspections(
+  agentId: string,
+  cursor?: string,
+): Promise<InspectionPageResponse> {
+  const query = new URLSearchParams({ agentId, limit: '50' });
+  if (cursor) query.set('cursor', cursor);
+  return apiRequest<InspectionPageResponse>(`/inspections?${query.toString()}`);
 }
